@@ -835,6 +835,7 @@ var state={
 };
 var photoCache={};
 var SESSION_KEY="praca_session_v1";
+var _authTransition=null; // "pending" enquanto um cadastro está gravando o doc do usuário no Firestore
 
 var TABS=[
   {id:"calendario",label:"Calendário",mobileLabel:"Calendário",icon:"cal"},
@@ -868,6 +869,12 @@ async function boot(){
 
   firebase.auth().onAuthStateChanged(async function(user){
     if(user){
+      if(_authTransition==="pending"){
+        // um cadastro está em andamento: o doc do usuário ainda está sendo gravado no Firestore.
+        // onAuthCadastro conclui a entrada assim que a gravação terminar; não faça a checagem de
+        // acesso agora, senão um cadastro novo pode ser barrado por engano (falso "acesso removido").
+        return;
+      }
       var list=[];
       try{ list=await Store.listUsuarios(); }catch(e){ console.error(e); }
       var u=list.filter(function(x){return x.id===user.uid;})[0];
@@ -884,7 +891,7 @@ async function boot(){
       }
     } else {
       state.authUser=null;
-      renderAuth();
+      if(_authTransition!=="pending") renderAuth();
     }
   });
 }
@@ -941,18 +948,29 @@ async function onAuthCadastro(){
   if(senha.length<6){ state._authErr="Use uma senha com pelo menos 6 caracteres."; renderAuth(); return; }
   if(senha!==senha2){ state._authErr="As senhas não conferem."; renderAuth(); return; }
   var cred;
+  _authTransition="pending";
   try{ cred=await firebase.auth().createUserWithEmailAndPassword(email,senha); }
-  catch(e){ state._authErr=traduzErroAuth(e); renderAuth(); return; }
+  catch(e){ _authTransition=null; state._authErr=traduzErroAuth(e); renderAuth(); return; }
   var novoUsuario={id:cred.user.uid,nome:nome||email,email:email,criadoEm:new Date().toISOString()};
+  var gravou=false;
   try{
     await db.collection("usuarios").doc(cred.user.uid).set(novoUsuario);
     await db.doc("meta/public").set({hasUsers:true},{merge:true});
+    gravou=true;
   }catch(e){
     console.error(e);
     toast("Conta criada, mas houve um problema ao salvar seu cadastro de acesso. Tente entrar novamente em instantes.",true);
   }
+  _authTransition=null;
   state._authErr=""; state._authModo=null;
-  // onAuthStateChanged cuida da transição para dentro do app
+  // conclui a entrada diretamente (não depende de o onAuthStateChanged ter disparado antes da gravação)
+  if(gravou && firebase.auth().currentUser && firebase.auth().currentUser.uid===novoUsuario.id){
+    state.usuarios=[novoUsuario].concat((state.usuarios||[]).filter(function(u){return u.id!==novoUsuario.id;}));
+    state.authUser={id:novoUsuario.id,email:novoUsuario.email,nome:novoUsuario.nome};
+    await afterLogin();
+  } else if(!gravou){
+    renderAuth();
+  }
 }
 
 async function onAuthLogin(){
