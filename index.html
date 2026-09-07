@@ -956,6 +956,17 @@ async function onAuthCadastro(){
   try{
     await db.collection("usuarios").doc(cred.user.uid).set(novoUsuario);
     await db.doc("meta/public").set({hasUsers:true},{merge:true});
+    // espera as escritas serem confirmadas no servidor antes de ler outras coleções:
+    // as regras de segurança (isMember) rodam no servidor, então uma leitura logo em
+    // seguida pode ser negada se o doc do usuário ainda só existir no cache local.
+    if(typeof db.waitForPendingWrites==="function"){
+      try{
+        await Promise.race([
+          db.waitForPendingWrites(),
+          new Promise(function(res){ setTimeout(res,8000); })
+        ]);
+      }catch(e2){ console.error(e2); }
+    }
     gravou=true;
   }catch(e){
     console.error(e);
