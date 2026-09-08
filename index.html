@@ -73,6 +73,8 @@ a{color:inherit;}
 #shell{display:flex;min-height:100vh;}
 #shell[hidden]{display:none;}
 #bottomnav[hidden]{display:none !important;}
+#mobiletopbar{display:none;}
+#mobiletopbar[hidden]{display:none !important;}
 
 /* ---------- Sidebar ---------- */
 #sidebar{
@@ -214,7 +216,7 @@ tr:hover td{background:rgba(255,255,255,.015);}
 .iconbtn{width:36px;height:36px;border-radius:8px;background:var(--bg-2);border:1px solid var(--border-2);color:var(--text-dim);display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none;}
 .iconbtn:hover{color:var(--text);background:var(--bg-3);}
 .iconbtn svg{width:15px;height:15px;stroke-width:2;}
-.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:5px;}
 .cal-dow{font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-faint);text-align:center;padding-bottom:4px;}
 .cal-cell{aspect-ratio:1/.82;border-radius:9px;border:1px solid var(--border);background:var(--bg-1);padding:6px;cursor:pointer;display:flex;flex-direction:column;justify-content:space-between;position:relative;}
 .cal-cell.pad{visibility:hidden;}
@@ -295,7 +297,18 @@ tr:hover td{background:rgba(255,255,255,.015);}
 
 @media(max-width:880px){
   #sidebar{display:none;}
-  #main{padding:18px 14px calc(90px + var(--safe-b));max-width:100%;}
+  #main{padding:calc(62px + var(--safe-t)) 14px calc(90px + var(--safe-b));max-width:100%;}
+  #mobiletopbar{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    position:fixed;top:0;left:0;right:0;z-index:40;
+    background:var(--bg-1);border-bottom:1px solid var(--border);
+    padding:calc(10px + var(--safe-t)) 14px 10px;
+  }
+  .mtb-status{display:flex;align-items:center;gap:8px;min-width:0;font-size:12.5px;color:var(--text-dim);}
+  #mobiletopbar .status-dot{flex:none;display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);}
+  #mobiletopbar .status-dot.off{background:var(--red);}
+  #who-email-m{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  #mobiletopbar .iconbtn{flex:none;}
   .kpi-row{grid-template-columns:repeat(2,1fr);}
   #bottomnav{
     display:flex;flex-direction:row;position:fixed;left:0;right:0;bottom:0;z-index:40;
@@ -307,6 +320,16 @@ tr:hover td{background:rgba(255,255,255,.015);}
   #bottomnav .tab-btn span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:64px;}
   .btn,.iconbtn,.seg button,.status-select{min-height:40px;}
   .thumb,.thumb-add{width:52px;height:52px;}
+  .precos-toprow{grid-template-columns:1fr;}
+  .precos-modo-field{align-items:stretch;}
+  .precos-modo-seg{display:flex;width:100%;flex-wrap:nowrap;}
+  .precos-modo-seg button{flex:1;text-align:center;white-space:nowrap;padding:8px 6px;}
+}
+@media(max-width:340px){
+  .cal-grid{gap:3px;}
+  .cal-cell{padding:4px;}
+  .cal-cell .d{font-size:11px;}
+  .cal-dow{font-size:9px;}
 }
 </style>
 
@@ -325,6 +348,10 @@ tr:hover td{background:rgba(255,255,255,.015);}
     </div>
   </aside>
   <main id="main"></main>
+</div>
+<div id="mobiletopbar" hidden>
+  <div class="mtb-status"><span class="status-dot off" id="db-dot-m"></span><span id="who-email-m"></span></div>
+  <button class="iconbtn" data-action="gerenciar-usuarios" aria-label="Conta e acesso"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c1.2-4 4-6 7-6s5.8 2 7 6"/></svg></button>
 </div>
 <nav class="tabs" id="bottomnav" hidden></nav>
 <div id="toasts"></div>
@@ -713,11 +740,13 @@ var mem={entidades:{},dias:{},fotos:{},usuarios:{}};
 var db=null;
 
 function updateConnStatus(){
-  var dot=document.getElementById("db-dot"), lbl=document.getElementById("db-label");
-  if(!dot||!lbl) return;
-  if(!db){ dot.classList.add("off"); lbl.textContent="modo local (nuvem indisponível)"; return; }
-  if(navigator.onLine){ dot.classList.remove("off"); lbl.textContent="sincronizado com a nuvem"; }
-  else { dot.classList.add("off"); lbl.textContent="offline — salvando neste aparelho, sincroniza ao reconectar"; }
+  [["db-dot","db-label"],["db-dot-m",null]].forEach(function(ids){
+    var dot=document.getElementById(ids[0]), lbl=ids[1]?document.getElementById(ids[1]):null;
+    if(!dot||(ids[1]&&!lbl)) return;
+    if(!db){ dot.classList.add("off"); if(lbl) lbl.textContent="modo local (nuvem indisponível)"; return; }
+    if(navigator.onLine){ dot.classList.remove("off"); if(lbl) lbl.textContent="sincronizado com a nuvem"; }
+    else { dot.classList.add("off"); if(lbl) lbl.textContent="offline — salvando neste aparelho, sincroniza ao reconectar"; }
+  });
 }
 
 // ---- caches em memória (por sessão) + gravação otimista ----
@@ -903,8 +932,10 @@ async function boot(){
 }
 
 function renderAuth(){
+  document.querySelectorAll(".modal-back").forEach(function(m){m.remove();});
   document.getElementById("shell").hidden=true;
   document.getElementById("bottomnav").hidden=true;
+  document.getElementById("mobiletopbar").hidden=true;
   var el=document.getElementById("auth-screen");
   el.hidden=false;
   var temUsuarios=!!state._temUsuarios;
@@ -1009,7 +1040,10 @@ async function afterLogin(){
   document.getElementById("auth-screen").hidden=true;
   document.getElementById("shell").hidden=false;
   document.getElementById("bottomnav").hidden=false;
-  document.getElementById("who-email").textContent=state.authUser.nome||state.authUser.email;
+  document.getElementById("mobiletopbar").hidden=false;
+  var whoTxt=state.authUser.nome||state.authUser.email;
+  document.getElementById("who-email").textContent=whoTxt;
+  var whoM=document.getElementById("who-email-m"); if(whoM) whoM.textContent=whoTxt;
   await seedIfNeeded();
   state.entidades=await Store.listEntidades();
   await refreshCurrentTabData();
@@ -1031,7 +1065,10 @@ function modalUsuarios(){
       '<label class="field">E-mail<input type="email" id="nu-email"></label>'+
       '<label class="field">Senha<input type="password" id="nu-senha"></label>'+
     "</div>"+
-    '<div class="modal-actions"><button type="button" class="btn ghost" data-close-modal="1">Fechar</button><button type="button" class="btn primary" id="nu-add">'+ICONS.plus+" Adicionar</button></div>"+
+    '<div class="modal-actions" style="justify-content:space-between">'+
+    '<button type="button" class="btn danger ghost" data-action="logout">Sair</button>'+
+    '<div style="display:flex;gap:8px"><button type="button" class="btn ghost" data-close-modal="1">Fechar</button><button type="button" class="btn primary" id="nu-add">'+ICONS.plus+" Adicionar</button></div>"+
+    "</div>"+
   "</div></div>";
 }
 
@@ -1217,13 +1254,12 @@ function viewCatalogo(){
   }).sort(function(a,b){return (a.nome||"").localeCompare(b.nome||"");});
 
   var rows=list.map(function(e){
-    return '<tr data-ent-edit="'+e.id+'" style="cursor:pointer">'+
-      '<td><div class="ent-row"><div><div class="nm">'+esc(e.nome)+'</div><div class="sub">'+esc(e.razaoSocial||"")+'</div></div></div></td>'+
-      '<td><span class="pill '+(e.tipo==="fornecedor"?"gold":e.tipo==="cliente"?"green":"gray")+'">'+esc(e.tipo)+'</span></td>'+
-      '<td>'+esc(e.cidade||"—")+"/"+esc(e.estado||"—")+'</td>'+
-      '<td class="num">'+esc(e.cnpj||"—")+'</td>'+
-    "</tr>";
-  }).join("") || '<tr><td colspan="4"><div class="empty">Nenhum fornecedor ou cliente encontrado.</div></td></tr>';
+    var loc=esc(e.cidade||"—")+"/"+esc(e.estado||"—")+(e.razaoSocial?" · "+esc(e.razaoSocial):"")+(e.cnpj?" · "+esc(e.cnpj):"");
+    return '<div class="op-row" data-ent-edit="'+e.id+'" style="cursor:pointer">'+
+      '<div class="l"><div class="meta"><div class="nm">'+esc(e.nome)+'</div><div class="loc">'+loc+'</div></div></div>'+
+      '<div class="r"><span class="pill '+(e.tipo==="fornecedor"?"gold":e.tipo==="cliente"?"green":"gray")+'">'+esc(e.tipo)+'</span></div>'+
+    "</div>";
+  }).join("") || '<div class="empty">'+ICONS.book+'<div class="t">Nenhum fornecedor ou cliente encontrado.</div></div>';
 
   return '<div class="page-head"><div><h1>Catálogo</h1><p class="lede">Fornecedores e clientes cadastrados.</p></div>'+
     '<div class="toolbar"><button class="btn primary" data-action="novo-ent">'+ICONS.plus+" Novo cadastro</button></div></div>"+
@@ -1231,7 +1267,7 @@ function viewCatalogo(){
       '<div class="seg">'+["todos","fornecedor","cliente"].map(function(f){return '<button class="'+(filtro===f?"active":"")+'" data-cat-filtro="'+f+'">'+(f==="todos"?"Todos":f==="fornecedor"?"Fornecedores":"Clientes")+"</button>";}).join("")+'</div>'+
       '<input type="text" placeholder="Buscar por nome ou cidade…" style="max-width:260px" id="cat-busca" value="'+esc(state._catBusca||"")+'">'+
     '</div>'+
-    '<div class="table-wrap"><table><thead><tr><th>Nome</th><th>Tipo</th><th>Cidade/UF</th><th>CNPJ</th></tr></thead><tbody>'+rows+"</tbody></table></div>";
+    rows;
 }
 
 function modalEntidade(ent){
@@ -1281,9 +1317,9 @@ function viewPrecos(){
 
   var form='<div class="card">'+
     '<div class="section-title">Lançar preço</div>'+
-    '<div class="field-row grid-2" style="margin-bottom:14px">'+
+    '<div class="field-row grid-2 precos-toprow" style="margin-bottom:14px">'+
       '<label class="field">Data<input type="date" id="preco-data" value="'+state.precoData+'"></label>'+
-      '<label class="field" style="justify-content:flex-end"><span>&nbsp;</span><div class="seg"><button class="'+(!novo?"active":"")+'" data-preco-modo="cad">Cadastrado</button><button class="'+(novo?"active":"")+'" data-preco-modo="novo">Novo / avulso</button></div></label>'+
+      '<label class="field precos-modo-field"><span>Modo</span><div class="seg precos-modo-seg"><button class="'+(!novo?"active":"")+'" data-preco-modo="cad">Cadastrado</button><button class="'+(novo?"active":"")+'" data-preco-modo="novo">Novo / avulso</button></div></label>'+
     '</div>'+
     '<div id="preco-ent-area">'+formInner+'</div>'+
     '<div class="field-row grid-2" style="margin-top:14px">'+
@@ -1466,15 +1502,17 @@ function renderListaResumo(agg){
     body='<div class="kpi"><div class="label">Média nacional / caixa</div><div class="value gold">'+(agg.geralAvg!=null?fmtMoney(agg.geralAvg):"—")+'</div></div>';
   } else if(state.resumoListaModo==="estado"){
     var rows=Object.keys(agg.porEstado).sort(function(a,b){return agg.porEstado[b].avg-agg.porEstado[a].avg;}).map(function(uf){
-      return "<tr><td>"+ESTADOS[uf]+" ("+uf+")</td><td class=\"num\">"+fmtMoney(agg.porEstado[uf].avg)+"</td><td class=\"num\">"+agg.porEstado[uf].n+"</td></tr>";
-    }).join("")||'<tr><td colspan="3"><div class="empty">Sem dados.</div></td></tr>';
-    body='<div class="table-wrap"><table><thead><tr><th>Estado</th><th>Preço médio/cx</th><th>Lançamentos</th></tr></thead><tbody>'+rows+"</tbody></table></div>";
+      return '<div class="op-row"><div class="l"><div class="meta"><div class="nm">'+ESTADOS[uf]+" ("+uf+')</div></div></div>'+
+        '<div class="r"><span class="valor num">'+fmtMoney(agg.porEstado[uf].avg)+'</span><span class="unit">'+agg.porEstado[uf].n+' lanç.</span></div></div>';
+    }).join("")||'<div class="empty">Sem dados.</div>';
+    body=rows;
   } else {
     var rows2=Object.keys(agg.porCidade).sort(function(a,b){return agg.porCidade[b].avg-agg.porCidade[a].avg;}).map(function(k){
       var parts=k.split("|");
-      return "<tr><td>"+esc(parts[0])+"</td><td>"+parts[1]+"</td><td class=\"num\">"+fmtMoney(agg.porCidade[k].avg)+"</td><td class=\"num\">"+agg.porCidade[k].n+"</td></tr>";
-    }).join("")||'<tr><td colspan="4"><div class="empty">Sem dados.</div></td></tr>';
-    body='<div class="table-wrap"><table><thead><tr><th>Cidade</th><th>UF</th><th>Preço médio/cx</th><th>Lançamentos</th></tr></thead><tbody>'+rows2+"</tbody></table></div>";
+      return '<div class="op-row"><div class="l"><div class="meta"><div class="nm">'+esc(parts[0])+'</div><div class="loc">'+parts[1]+'</div></div></div>'+
+        '<div class="r"><span class="valor num">'+fmtMoney(agg.porCidade[k].avg)+'</span><span class="unit">'+agg.porCidade[k].n+' lanç.</span></div></div>';
+    }).join("")||'<div class="empty">Sem dados.</div>';
+    body=rows2;
   }
   return '<div class="card">'+tabs+body+"</div>";
 }
@@ -1485,8 +1523,11 @@ function renderPorFornecedor(dia){
   var ufs=Object.keys(byUf).sort();
   if(!ufs.length) return '<div class="card"><div class="empty">Sem lançamentos nesta data.</div></div>';
   return ufs.map(function(uf){
-    var rows=byUf[uf].map(function(p){return "<tr><td>"+esc(p.nome)+"</td><td>"+esc(p.cidade)+"</td><td class=\"num\">"+fmtMoney(p.preco)+"/cx</td></tr>";}).join("");
-    return '<div class="card"><div class="section-title">'+(ESTADOS[uf]||uf)+" ("+uf+')</div><div class="table-wrap"><table><thead><tr><th>Fornecedor</th><th>Cidade</th><th>Preço</th></tr></thead><tbody>'+rows+"</tbody></table></div></div>";
+    var rows=byUf[uf].map(function(p){
+      return '<div class="op-row"><div class="l"><div class="meta"><div class="nm">'+esc(p.nome)+'</div><div class="loc">'+esc(p.cidade)+'</div></div></div>'+
+        '<div class="r"><span class="valor num">'+fmtMoney(p.preco)+'/cx</span></div></div>';
+    }).join("");
+    return '<div class="card"><div class="section-title">'+(ESTADOS[uf]||uf)+" ("+uf+')</div>'+rows+"</div>";
   }).join("");
 }
 
@@ -1830,6 +1871,8 @@ document.addEventListener("click",function(e){
   if(action==="logout"){ logout(); }
   else if(action==="gerenciar-usuarios"){
     var node=openModal(modalUsuarios());
+    var sairBtn=node.querySelector('[data-action="logout"]');
+    if(sairBtn) sairBtn.onclick=logout;
     var addBtn=node.querySelector("#nu-add");
     addBtn.onclick=guarded(async function(){
       var nome=(node.querySelector("#nu-nome").value||"").trim();
