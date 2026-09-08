@@ -138,7 +138,7 @@ input[type=text],input[type=email],input[type=password],input[type=number],input
   border-radius:var(--radius-s);padding:10px 11px;font-size:15.5px;width:100%;
 }
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(201,162,78,.18);}
-#preco-data{text-align:center;max-width:100%;min-width:0;}
+#preco-data{text-align:center;width:170px;max-width:100%;min-width:0;margin:0 auto;}
 #preco-data::-webkit-datetime-edit{text-align:center;}
 #preco-data::-webkit-datetime-edit-fields-wrapper{display:flex;justify-content:center;}
 label.field{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--text-dim);font-weight:600;min-width:0;}
@@ -195,8 +195,12 @@ tr:hover td{background:rgba(255,255,255,.015);}
 .photo-slot{display:flex;flex-direction:column;gap:6px;}
 .photo-slot .row{display:flex;gap:8px;align-items:center;}
 .photo-slot .lbl{font-size:11px;color:var(--text-faint);}
-.lightbox-back{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:90;cursor:zoom-out;}
-.lightbox-back img{max-width:88vw;max-height:88vh;border-radius:8px;}
+.lightbox-back{position:fixed;inset:0;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;z-index:90;padding:20px;}
+.lightbox-inner{position:relative;display:flex;flex-direction:column;align-items:center;gap:14px;max-width:92vw;cursor:default;}
+.lightbox-inner img{max-width:88vw;max-height:70vh;border-radius:8px;}
+.lightbox-actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;}
+.lightbox-actions .btn{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.18);color:#f7f8f8;}
+.lightbox-close{position:absolute;top:-46px;right:0;background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2);color:#fff;}
 
 /* ---------- Auth ---------- */
 #auth-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;}
@@ -315,7 +319,7 @@ tr:hover td{background:rgba(255,255,255,.015);}
     padding:calc(10px + var(--safe-t)) 14px 10px;
   }
   .mtb-status{display:flex;align-items:center;gap:8px;min-width:0;font-size:12.5px;color:var(--text-dim);justify-self:start;}
-  .mtb-logo{justify-self:center;height:30px;width:auto;object-fit:contain;border-radius:6px;}
+  .mtb-logo{justify-self:center;height:38px;width:auto;object-fit:contain;border-radius:6px;}
   #mobiletopbar .status-dot{flex:none;display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--green);}
   #mobiletopbar .status-dot.off{background:var(--red);}
   #who-email-m{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
@@ -651,30 +655,74 @@ function pseudo(n){var x=Math.sin(n)*10000;return x-Math.floor(x);}
 /* compressão de imagem -> dataURL (mira <190KB p/ caber no doc de 256KB) */
 function compressImage(file){
   return new Promise(function(resolve,reject){
-    var reader=new FileReader();
-    reader.onerror=function(){reject(new Error("Não foi possível ler o arquivo."));};
-    reader.onload=function(){
-      var img=new Image();
-      img.onerror=function(){reject(new Error("Arquivo de imagem inválido."));};
-      img.onload=function(){
-        var combos=[[1000,.6],[800,.5],[640,.4],[480,.35],[360,.3]];
-        var i=0;
-        function attempt(){
-          if(i>=combos.length){reject(new Error("Imagem muito pesada mesmo comprimida. Tente uma foto mais simples."));return;}
-          var maxDim=combos[i][0],q=combos[i][1];
-          var scale=Math.min(1,maxDim/Math.max(img.width,img.height));
-          var w=Math.max(1,Math.round(img.width*scale)),h=Math.max(1,Math.round(img.height*scale));
-          var cv=document.createElement("canvas");cv.width=w;cv.height=h;
-          cv.getContext("2d").drawImage(img,0,0,w,h);
-          var url=cv.toDataURL("image/jpeg",q);
-          if(url.length<190000||i===combos.length-1){resolve(url);}else{i++;attempt();}
-        }
-        attempt();
+    function fromSource(source,naturalW,naturalH){
+      var combos=[[1000,.6],[800,.5],[640,.4],[480,.35],[360,.3]];
+      var i=0;
+      function attempt(){
+        if(i>=combos.length){reject(new Error("Imagem muito pesada mesmo comprimida. Tente uma foto mais simples."));return;}
+        var maxDim=combos[i][0],q=combos[i][1];
+        var scale=Math.min(1,maxDim/Math.max(naturalW,naturalH));
+        var w=Math.max(1,Math.round(naturalW*scale)),h=Math.max(1,Math.round(naturalH*scale));
+        var cv=document.createElement("canvas");cv.width=w;cv.height=h;
+        var ctx=cv.getContext("2d");
+        var url;
+        try{
+          ctx.drawImage(source,0,0,w,h);
+          url=cv.toDataURL("image/jpeg",q);
+        }catch(err){ reject(new Error("Não foi possível processar esta imagem. Tente outra foto.")); return; }
+        if(url.length<190000||i===combos.length-1){resolve(url);}else{i++;attempt();}
+      }
+      attempt();
+    }
+    function readViaFileReader(){
+      var reader=new FileReader();
+      reader.onerror=function(){reject(new Error("Não foi possível ler o arquivo."));};
+      reader.onload=function(){
+        var img=new Image();
+        img.onerror=function(){reject(new Error("Não foi possível abrir esta imagem. Tente outra foto ou tire uma nova."));};
+        img.onload=function(){ fromSource(img, img.naturalWidth||img.width, img.naturalHeight||img.height); };
+        img.src=reader.result;
       };
-      img.src=reader.result;
-    };
-    reader.readAsDataURL(file);
+      reader.readAsDataURL(file);
+    }
+    if(window.createImageBitmap){
+      createImageBitmap(file).then(function(bitmap){
+        fromSource(bitmap, bitmap.width, bitmap.height);
+      }).catch(function(){ readViaFileReader(); });
+    } else {
+      readViaFileReader();
+    }
   });
+}
+
+async function dataUrlToFile(dataUrl,filename){
+  var res=await fetch(dataUrl);
+  var blob=await res.blob();
+  return new File([blob],filename,{type:blob.type||"image/jpeg"});
+}
+
+async function shareOrSaveFoto(dataUrl,modo){
+  try{
+    var file=await dataUrlToFile(dataUrl,"foto-"+Date.now()+".jpg");
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({files:[file],title:"Foto"});
+      return;
+    }
+  }catch(err){
+    if(err && err.name==="AbortError") return;
+    console.error(err);
+  }
+  try{
+    var a=document.createElement("a");
+    a.href=dataUrl;
+    a.download="foto-"+Date.now()+".jpg";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    toast(modo==="save"?"Se o download não abrir automaticamente, toque e segure a imagem para salvar na galeria.":"Baixe a imagem para compartilhar pelo WhatsApp.");
+  }catch(err2){
+    toast("Não foi possível processar a imagem.",true);
+  }
 }
 
 /* ============ segurança (hash client-side) ============ */
@@ -1738,8 +1786,14 @@ function attachHandlers(){
     var fa=document.getElementById("preco-foto-add"); if(fa) fa.onclick=function(){document.getElementById("preco-foto-input").click();};
     var fi=document.getElementById("preco-foto-input"); if(fi) fi.onchange=async function(){
       if(!fi.files[0])return;
-      try{ state.precoFotoPendente=await compressImage(fi.files[0]); render(); }
-      catch(e){ toast(e.message,true); }
+      var faLoad=document.getElementById("preco-foto-add"); if(faLoad) faLoad.innerHTML='<span style="font-size:11px;color:var(--text-faint)">enviando…</span>';
+      try{
+        state.precoFotoPendente=await compressImage(fi.files[0]);
+        // atualiza só a miniatura no lugar, sem re-renderizar o formulário inteiro
+        // (um render() completo aqui apagaria preço/observações já digitados)
+        if(faLoad) faLoad.innerHTML='<img class="thumb" src="'+state.precoFotoPendente+'">';
+      }
+      catch(e){ toast(e.message,true); if(faLoad) faLoad.innerHTML=ICONS.cam; }
     };
     var add=document.querySelector('[data-action="add-preco"]'); if(add) add.onclick=guarded(onAddPreco);
     document.querySelectorAll("[data-del-preco]").forEach(function(el){el.onclick=guarded(async function(){
@@ -1838,6 +1892,9 @@ function hookEntidadeModal(ent){
   });
 }
 
+var ICON_SHARE='<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="1.8"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 10.7 15.8 6.3M8.2 13.3l7.6 4.4"/></svg>';
+var ICON_SAVE='<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none" stroke-width="1.8"><path d="M12 3v12m0 0-4-4m4 4 4-4"/><path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>';
+
 function hookFotoThumb(el){
   var key=el.getAttribute("data-view-foto").split("|");
   var diaIso=key[0],fotoId=key[1];
@@ -1851,8 +1908,18 @@ function hookFotoThumb(el){
     var url=photoCache[diaIso+"/"+fotoId];
     if(!url)return;
     var back=document.createElement("div"); back.className="lightbox-back";
-    back.innerHTML='<img src="'+url+'">';
+    back.innerHTML='<div class="lightbox-inner" onclick="event.stopPropagation()">'+
+      '<button type="button" class="iconbtn lightbox-close" aria-label="Fechar">'+ICONS.x+"</button>"+
+      '<img src="'+url+'">'+
+      '<div class="lightbox-actions">'+
+        '<button type="button" class="btn ghost" data-lb="share">'+ICON_SHARE+" Compartilhar no WhatsApp</button>"+
+        '<button type="button" class="btn ghost" data-lb="save">'+ICON_SAVE+" Salvar na galeria</button>"+
+      "</div>"+
+    "</div>";
     back.onclick=function(){back.remove();};
+    back.querySelector(".lightbox-close").onclick=function(){back.remove();};
+    back.querySelector('[data-lb="share"]').onclick=guarded(function(){return shareOrSaveFoto(url,"share");});
+    back.querySelector('[data-lb="save"]').onclick=guarded(function(){return shareOrSaveFoto(url,"save");});
     document.body.appendChild(back);
   };
 }
@@ -1935,15 +2002,19 @@ function hookCargaModal(carga){
   faN.onclick=function(){document.getElementById("carga-foto-nota-input").click();};
   document.getElementById("carga-foto-nota-input").onchange=async function(e){
     if(!e.target.files[0])return;
+    var prevN=faN.innerHTML;
+    faN.innerHTML='<span style="font-size:10px;color:var(--text-faint)">enviando…</span>';
     try{ modalFotoNota=await compressImage(e.target.files[0]); faN.innerHTML='<img class="thumb" src="'+modalFotoNota+'">'; }
-    catch(err){ toast(err.message,true); }
+    catch(err){ toast(err.message,true); faN.innerHTML=prevN; }
   };
   var faQ=document.getElementById("carga-foto-qual-add");
   faQ.onclick=function(){document.getElementById("carga-foto-qual-input").click();};
   document.getElementById("carga-foto-qual-input").onchange=async function(e){
     if(!e.target.files[0])return;
+    var prevQ=faQ.innerHTML;
+    faQ.innerHTML='<span style="font-size:10px;color:var(--text-faint)">enviando…</span>';
     try{ modalFotoQual=await compressImage(e.target.files[0]); faQ.innerHTML='<img class="thumb" src="'+modalFotoQual+'">'; }
-    catch(err){ toast(err.message,true); }
+    catch(err){ toast(err.message,true); faQ.innerHTML=prevQ; }
   };
 
   if(carga && carga.fotoId){
